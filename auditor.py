@@ -1,12 +1,12 @@
-# Day 1: Local System Hardening Auditor - File Permission Inspector
+# Day 2: Local System Hardening Auditor - Permission & Interface Inspector
 import os
 import stat
+import socket
 
 print("--- Local System Hardening Auditor Initialized ---")
-print("Scanning critical system path permissions...\n")
+print("Executing System Compliance Audit...\n")
 
-# Define target paths and their maximum secure permission masks (in octal)
-# e.g., 0o644 means Owner: RW, Group: R, Others: R
+# --- SECTION 1: File Permission Audit ---
 TARGET_PATHS = {
     "/etc/passwd": 0o644,
     "/etc/shadow": 0o600,
@@ -17,26 +17,44 @@ def check_file_permissions(filepath, max_octal_mode):
     if not os.path.exists(filepath):
         return f"[SKIP] Path does not exist: {filepath}"
     
-    # Get physical file status
     file_stat = os.stat(filepath)
-    # Extract permission bits only
     current_mode = stat.S_IMODE(file_stat.st_mode)
-    
-    # Octal string representation for readable logs
     current_octal = oct(current_mode)
     expected_octal = oct(max_octal_mode)
     
-    # Check if 'others' (world) have write access bit set (0o002)
     is_world_writable = bool(current_mode & stat.S_IWOTH)
     
     if is_world_writable:
         return f"🚨 [HIGH RISK] {filepath} is WORLD-WRITABLE! ({current_octal} > {expected_octal})"
     elif current_mode > max_octal_mode:
-        return f"⚠️ [WARN] {filepath} permissions are looser than recommended: {current_octal} (Expected <= {expected_octal})"
+        return f"⚠️ [WARN] {filepath} permissions looser than recommended: {current_octal} (Expected <= {expected_octal})"
     else:
         return f"✅ [PASS] {filepath} permissions secure: {current_octal}"
 
-# Run the audit across defined targets
+print("=== 1. File Permission Controls ===")
 for path, expected_mode in TARGET_PATHS.items():
-    result = check_file_permissions(path, expected_mode)
-    print(result)
+    print(check_file_permissions(path, expected_mode))
+
+
+# --- SECTION 2: Network Interface Exposure Audit ---
+# Common management ports to evaluate
+CHECK_PORTS = [22, 80, 443, 3306, 5432, 8080, 27017]
+
+def check_socket_binding(port):
+    """
+    Tests whether common service ports are bound to wildcard (0.0.0.0) 
+    or isolated localhost (127.0.0.1) interfaces.
+    """
+    # Test binding to localhost
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.1)
+        res_local = s.connect_ex(("127.0.0.1", port))
+    
+    if res_local == 0:
+        return f"⚠️ [EXPOSED] Port {port} is active and accepting connections."
+    else:
+        return f"✅ [PASS] Port {port} is inactive / closed locally."
+
+print("\n=== 2. Local Service Binding Audit ===")
+for port in CHECK_PORTS:
+    print(check_socket_binding(port))
